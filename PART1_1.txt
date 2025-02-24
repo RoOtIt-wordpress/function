@@ -1,0 +1,666 @@
+<?php
+// Exit if accessed directly
+if ( !defined( 'ABSPATH' ) ) exit;
+
+// BEGIN ENQUEUE PARENT ACTION
+// AUTO GENERATED - Do not modify or remove comment markers above or below:
+
+if ( !function_exists( 'chld_thm_cfg_locale_css' ) ):
+    function chld_thm_cfg_locale_css( $uri ){
+        if ( empty( $uri ) && is_rtl() && file_exists( get_template_directory() . '/rtl.css' ) )
+            $uri = get_template_directory_uri() . '/rtl.css';
+        return $uri;
+    }
+endif;
+add_filter( 'locale_stylesheet_uri', 'chld_thm_cfg_locale_css' );
+         
+if ( !function_exists( 'child_theme_configurator_css' ) ):
+    function child_theme_configurator_css() {
+        wp_enqueue_style( 'chld_thm_cfg_child', trailingslashit( get_stylesheet_directory_uri() ) . 'style.css', array( 'hello-elementor','hello-elementor','hello-elementor-theme-style','hello-elementor-header-footer' ) );
+    }
+endif;
+add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
+
+// END ENQUEUE PARENT ACTION
+
+//     تغییر فونت پیشخوان وردپرس     //
+function change_admin_font() {
+    echo '<style type="text/css">@font-face{font-family:"esfont";src:url("' . get_stylesheet_directory_uri() . '/font/esfont.ttf")}#wpwrap,#wpadminbar .ab-empty-item,#wpadminbar a.ab-item,#wpadminbar>#wp-toolbar span.ab-label,#wpadminbar>#wp-toolbar span.noticon,.rtl h1,.rtl h2,.rtl h3,.rtl h4,.rtl h5,.rtl h6,.media-toolbar-secondary,.media-frame.mode-grid .media-toolbar select,.details,.media-modal label{font-family:"esfont"}</style>';
+}
+add_action('admin_head', 'change_admin_font');
+//======================================================================================================================================== بخش فرم ارسال درخواست
+// ایجاد جداول مورد نیاز در دیتابیس
+function create_custom_user_groups_tables() {
+    global $wpdb;
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    // جدول گروه‌های کاربری
+    $table_groups = $wpdb->prefix . 'custom_user_groups';
+    
+    // بررسی وجود جدول
+    if($wpdb->get_var("SHOW TABLES LIKE '$table_groups'") != $table_groups) {
+        $sql = "CREATE TABLE $table_groups (
+            id mediumint(9) NOT NULL AUTO_INCREMENT,
+            group_key varchar(50) NOT NULL,
+            group_name varchar(100) NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            UNIQUE KEY group_key (group_key)
+        ) $charset_collate;";
+        
+        // جدول ارتباط کاربران و گروه‌ها
+        $table_relations = $wpdb->prefix . 'custom_user_group_relations';
+        $sql .= "CREATE TABLE $table_relations (
+            id mediumint(9) NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) NOT NULL,
+            group_id mediumint(9) NOT NULL,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            UNIQUE KEY user_group (user_id,group_id)
+        ) $charset_collate;";
+
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+
+        // افزودن گروه پیش‌فرض
+        $wpdb->insert(
+            $table_groups,
+            array(
+                'group_key' => 'admin_group',
+                'group_name' => 'گروه مدیران'
+            ),
+            array('%s', '%s')
+        );
+    }
+}
+
+// فراخوانی تابع ایجاد جداول در زمان فعالسازی قالب
+add_action('after_switch_theme', 'create_custom_user_groups_tables');
+
+// ایجاد پست تایپ سفارشی برای پیام‌ها
+add_action('init', 'create_messages_post_type');
+function create_messages_post_type() {
+    register_post_type('messages',
+        array(
+            'labels' => array(
+                'name' => 'پیام‌ها',
+                'singular_name' => 'پیام',
+                'add_new' => 'افزودن پیام جدید',
+                'add_new_item' => 'افزودن پیام جدید',
+                'edit_item' => 'ویرایش پیام',
+                'view_item' => 'مشاهده پیام',
+            ),
+            'public' => true,
+            'has_archive' => true,
+            'supports' => array('title', 'editor', 'custom-fields'),
+            'menu_icon' => 'dashicons-email',
+        )
+    );
+}
+
+// افزودن منو در داشبورد
+add_action('admin_menu', 'add_custom_user_groups_menu');
+function add_custom_user_groups_menu() {
+    add_menu_page(
+        'مدیریت گروه‌های کاربری',
+        'گروه‌های کاربری',
+        'manage_options',
+        'custom-user-groups',
+        'display_custom_user_groups_page',
+        'dashicons-groups',
+        30
+    );
+}
+
+// تابع کمکی برای دریافت همه گروه‌ها
+function get_all_custom_user_groups() {
+    global $wpdb;
+    $table_groups = $wpdb->prefix . 'custom_user_groups';
+    
+    if($wpdb->get_var("SHOW TABLES LIKE '$table_groups'") != $table_groups) {
+        create_custom_user_groups_tables();
+    }
+    
+    $groups = $wpdb->get_results("SELECT group_key, group_name FROM $table_groups ORDER BY group_name ASC");
+    $result = array();
+    foreach ($groups as $group) {
+        $result[$group->group_key] = $group->group_name;
+    }
+    return $result;
+}
+
+// تابع کمکی برای دریافت گروه‌های یک کاربر
+function get_user_custom_groups($user_id) {
+    global $wpdb;
+    $table_groups = $wpdb->prefix . 'custom_user_groups';
+    $table_relations = $wpdb->prefix . 'custom_user_group_relations';
+    
+    $query = $wpdb->prepare(
+        "SELECT g.group_key, g.group_name 
+         FROM $table_groups g 
+         INNER JOIN $table_relations r ON g.id = r.group_id 
+         WHERE r.user_id = %d",
+        $user_id
+    );
+    
+    $groups = $wpdb->get_results($query);
+    $result = array();
+    
+    foreach ($groups as $group) {
+        $result[$group->group_key] = $group->group_name;
+    }
+    
+    return $result;
+}
+
+// مدیریت ارسال پیام از طریق AJAX
+add_action('wp_ajax_handle_message_submission', 'handle_message_submission');
+function handle_message_submission() {
+    if (!check_ajax_referer('send_message_nonce', 'message_nonce', false)) {
+        wp_send_json_error('خطای امنیتی');
+    }
+
+    $user_role = sanitize_text_field($_POST['user_role']);
+    $message_title = sanitize_text_field($_POST['message_title']);
+    $message_content = wp_kses_post($_POST['message']);
+    $selected_users = isset($_POST['selected_user']) ? array_map('intval', $_POST['selected_user']) : array();
+
+    if (empty($user_role) || empty($message_title) || empty($message_content) || empty($selected_users)) {
+        wp_send_json_error('لطفاً همه فیلدها را پر کنید.');
+    }
+
+    // ایجاد پست جدید
+    $post_data = array(
+        'post_title'   => $message_title,
+        'post_content' => $message_content,
+        'post_status'  => 'publish',
+        'post_author'  => get_current_user_id(),
+        'post_type'    => 'messages'
+    );
+
+    $post_id = wp_insert_post($post_data);
+
+    if (is_wp_error($post_id)) {
+        wp_send_json_error('خطا در ذخیره پیام');
+    }
+
+    // ذخیره متادیتا
+    update_post_meta($post_id, 'user_role', $user_role);
+    update_post_meta($post_id, 'selected_users', $selected_users);
+
+    // مدیریت فایل‌های پیوست
+    if (!empty($_FILES['attachments'])) {
+        $files = $_FILES['attachments'];
+        $uploaded_files = array();
+
+        for ($i = 0; $i < count($files['name']); $i++) {
+            if ($files['error'][$i] === 0) {
+                $file = array(
+                    'name'     => $files['name'][$i],
+                    'type'     => $files['type'][$i],
+                    'tmp_name' => $files['tmp_name'][$i],
+                    'error'    => $files['error'][$i],
+                    'size'     => $files['size'][$i]
+                );
+
+                $upload = wp_handle_upload($file, array('test_form' => false));
+
+                if (!isset($upload['error'])) {
+                    $uploaded_files[] = $upload['url'];
+                }
+            }
+        }
+
+        if (!empty($uploaded_files)) {
+            update_post_meta($post_id, 'message_attachments', $uploaded_files);
+        }
+    }
+
+    wp_send_json_success('پیام با موفقیت ارسال شد.');
+}
+// نمایش صفحه مدیریت گروه‌ها
+function display_custom_user_groups_page() {
+    global $wpdb;
+    $table_groups = $wpdb->prefix . 'custom_user_groups';
+
+    // پردازش فرم افزودن/ویرایش گروه
+    if (isset($_POST['submit_group']) && check_admin_referer('custom_user_groups_action')) {
+        $group_key = sanitize_key($_POST['group_key']);
+        $group_name = sanitize_text_field($_POST['group_name']);
+        
+        if (!empty($group_key) && !empty($group_name)) {
+            $exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM $table_groups WHERE group_key = %s",
+                $group_key
+            ));
+            
+            if ($exists) {
+                echo '<div class="notice notice-error"><p>این کلید گروه قبلاً استفاده شده است.</p></div>';
+            } else {
+                $result = $wpdb->insert(
+                    $table_groups,
+                    array(
+                        'group_key' => $group_key,
+                        'group_name' => $group_name
+                    ),
+                    array('%s', '%s')
+                );
+                
+                if ($result !== false) {
+                    echo '<div class="notice notice-success"><p>گروه با موفقیت ایجاد شد.</p></div>';
+                } else {
+                    echo '<div class="notice notice-error"><p>خطا در ایجاد گروه: ' . $wpdb->last_error . '</p></div>';
+                }
+            }
+        }
+    }
+
+    // پردازش حذف گروه
+    if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['group'])) {
+        if (check_admin_referer('delete_custom_group_' . $_GET['group'])) {
+            if ($_GET['group'] === 'admin_group') {
+                echo '<div class="notice notice-error"><p>گروه مدیران قابل حذف نیست!</p></div>';
+            } else {
+                $wpdb->delete($table_groups, array('group_key' => $_GET['group']));
+                echo '<div class="notice notice-success"><p>گروه با موفقیت حذف شد.</p></div>';
+            }
+        }
+    }
+
+    // بروزرسانی کاربران گروه
+    if (isset($_POST['update_group_users']) && isset($_POST['group_id'])) {
+        $group_id = intval($_POST['group_id']);
+        
+        if (wp_verify_nonce($_POST['_wpnonce'], 'manage_group_users_' . $group_id)) {
+            $table_relations = $wpdb->prefix . 'custom_user_group_relations';
+            
+            // حذف روابط قبلی
+            $wpdb->delete($table_relations, array('group_id' => $group_id));
+            
+            // افزودن روابط جدید
+            if (!empty($_POST['group_users']) && is_array($_POST['group_users'])) {
+                foreach ($_POST['group_users'] as $user_id) {
+                    $wpdb->insert(
+                        $table_relations,
+                        array(
+                            'user_id' => intval($user_id),
+                            'group_id' => $group_id
+                        ),
+                        array('%d', '%d')
+                    );
+                }
+            }
+            
+            echo '<div class="notice notice-success"><p>کاربران گروه با موفقیت بروزرسانی شدند.</p></div>';
+        }
+    }
+
+    // دریافت لیست گروه‌ها
+    $groups = $wpdb->get_results("SELECT * FROM $table_groups ORDER BY group_name ASC");
+    ?>
+    <div class="wrap">
+        <h1>مدیریت گروه‌های کاربری</h1>
+        
+        <!-- فرم افزودن گروه -->
+        <div class="card">
+            <h2>افزودن گروه جدید</h2>
+            <form method="post" action="">
+                <?php wp_nonce_field('custom_user_groups_action'); ?>
+                <table class="form-table">
+                    <tr>
+                        <th><label for="group_key">کلید گروه</label></th>
+                        <td>
+                            <input type="text" name="group_key" id="group_key" class="regular-text" 
+                                   pattern="[a-z0-9-_]+" title="فقط حروف انگلیسی کوچک، اعداد، خط تیره و آندرلاین" required>
+                            <p class="description">فقط حروف انگلیسی کوچک، اعداد، خط تیره و آندرلاین (مثال: teacher-group)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="group_name">نام گروه</label></th>
+                        <td>
+                            <input type="text" name="group_name" id="group_name" class="regular-text" required>
+                            <p class="description">نام نمایشی گروه (مثال: گروه معلمان)</p>
+                        </td>
+                    </tr>
+                </table>
+                <p class="submit">
+                    <input type="submit" name="submit_group" class="button button-primary" value="ذخیره گروه">
+                </p>
+            </form>
+        </div>
+
+        <!-- لیست گروه‌ها -->
+        <div class="card">
+            <h2>گروه‌های موجود</h2>
+            <table class="wp-list-table widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th>کلید گروه</th>
+                        <th>نام گروه</th>
+                        <th>تعداد اعضا</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    if ($groups && !empty($groups)):
+                        foreach ($groups as $group): 
+                            $member_count = $wpdb->get_var($wpdb->prepare(
+                                "SELECT COUNT(*) FROM {$wpdb->prefix}custom_user_group_relations WHERE group_id = %d",
+                                $group->id
+                            ));
+                    ?>
+                        <tr>
+                            <td><?php echo esc_html($group->group_key); ?></td>
+                            <td><?php echo esc_html($group->group_name); ?></td>
+                            <td><?php echo intval($member_count); ?></td>
+                            <td>
+                                <?php if ($group->group_key !== 'admin_group'): ?>
+                                    <a href="<?php echo wp_nonce_url(
+                                        admin_url('admin.php?page=custom-user-groups&action=delete&group=' . $group->group_key),
+                                        'delete_custom_group_' . $group->group_key
+                                    ); ?>" 
+                                       onclick="return confirm('آیا از حذف این گروه اطمینان دارید؟');"
+                                       class="button button-small button-link-delete">حذف</a>
+                                <?php else: ?>
+                                    <span class="description">گروه پیش‌فرض</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php 
+                        endforeach;
+                    else:
+                    ?>
+                        <tr>
+                            <td colspan="4">هیچ گروهی یافت نشد.</td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- مدیریت کاربران گروه‌ها -->
+        <div class="card">
+            <h2>مدیریت کاربران گروه‌ها</h2>
+            <?php
+            $users = get_users(array('orderby' => 'display_name'));
+            
+            foreach ($groups as $group):
+                $group_users = $wpdb->get_col($wpdb->prepare(
+                    "SELECT user_id FROM {$wpdb->prefix}custom_user_group_relations WHERE group_id = %d",
+                    $group->id
+                ));
+            ?>
+                <div class="group-users-section">
+                    <h3><?php echo esc_html($group->group_name); ?></h3>
+                    <form method="post" action="" class="group-users-form">
+                        <?php wp_nonce_field('manage_group_users_' . $group->id); ?>
+                        <input type="hidden" name="group_id" value="<?php echo $group->id; ?>">
+                        <div class="user-selection">
+                            <select name="group_users[]" multiple class="group-users-select">
+                                <?php foreach ($users as $user): ?>
+                                    <option value="<?php echo $user->ID; ?>"
+                                        <?php echo in_array($user->ID, $group_users) ? 'selected' : ''; ?>>
+                                        <?php echo esc_html($user->display_name . ' (' . $user->user_email . ')'); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="user-selection-controls">
+                                <input type="submit" name="update_group_users" class="button button-primary" 
+                                       value="بروزرسانی کاربران گروه">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <!-- Select2 -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+    jQuery(document).ready(function($) {
+        $('.group-users-select').select2({
+            placeholder: 'کاربران را انتخاب کنید...',
+            width: 'resolve',
+            language: {
+                noResults: function() {
+                    return "کاربری یافت نشد";
+                }
+            }
+        });
+    });
+    </script>
+    <?php
+}
+// افزودن اسکریپت‌های مورد نیاز
+add_action('wp_enqueue_scripts', 'enqueue_message_scripts');
+function enqueue_message_scripts() {
+    if (has_shortcode(get_post()->post_content, 'myform')) {
+        wp_enqueue_script('jquery');
+        wp_enqueue_editor();
+    }
+}
+
+// اضافه کردن متغیر ajaxurl به فوتر سایت
+add_action('wp_footer', 'add_ajax_url');
+function add_ajax_url() {
+    ?>
+    <script type="text/javascript">
+        var ajaxurl = "<?php echo admin_url('admin-ajax.php'); ?>";
+    </script>
+    <?php
+}
+
+// ایجاد شورت کد برای فرم
+add_shortcode('myform', 'display_custom_message_form');
+
+function display_custom_message_form() {
+    if (!is_user_logged_in()) {
+        return 'لطفا برای دسترسی به سامانه وارد شوید.';
+    }
+    
+    // دریافت گروه‌های کاربری از دیتابیس
+    $roles = get_all_custom_user_groups();
+    if (empty($roles)) {
+        return 'هیچ گروه کاربری تعریف نشده است. لطفاً ابتدا گروه‌های کاربری را تعریف کنید.';
+    }
+    
+    // دریافت همه کاربران
+    $users = get_users(array('orderby' => 'display_name'));
+
+    ob_start();
+    ?>
+    <div class="user-time-info">
+        <p>زمان فعلی: <?php echo current_time('mysql', true); ?></p>
+        <p>نام کاربری: <?php echo wp_get_current_user()->user_login; ?></p>
+    </div>
+
+    <form id="myform" class="custom-message-form" method="post" enctype="multipart/form-data">
+        <div class="form-group">
+            <h3>گروه کاربران</h3>
+            <div class="role-options horizontal-radio">
+                <?php foreach ($roles as $role_key => $role_name): ?>
+                    <div class="radio-item">
+                        <input type="radio" name="user_role" id="role_<?php echo esc_attr($role_key); ?>" 
+                               value="<?php echo esc_attr($role_key); ?>" class="role-radio">
+                        <label for="role_<?php echo esc_attr($role_key); ?>"><?php echo esc_html($role_name); ?></label>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <h3>عنوان پیام</h3>
+            <input type="text" name="message_title" class="message-title" placeholder="عنوان پیام" required>
+        </div>
+        
+        <div class="form-group">
+            <h3>انتخاب کاربر</h3>
+            <input type="text" id="user-search" class="user-search" placeholder="جستجوی کاربر...">
+            <div id="filter-status" class="filter-status"></div>
+            <select name="selected_user[]" id="selected_user" class="user-select" required multiple size="3">
+                <?php foreach ($users as $user): 
+                    $user_groups = get_user_custom_groups($user->ID);
+                    $user_group_keys = array_keys($user_groups);
+                ?>
+                    <option value="<?php echo $user->ID; ?>" 
+                            data-role="<?php echo esc_attr(implode(' ', $user_group_keys)); ?>">
+                        <?php echo esc_html($user->display_name . ' (' . $user->user_email . ')'); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <h3>پیام</h3>
+            <?php 
+            wp_editor('', 'message', array(
+                'media_buttons' => false,
+                'textarea_rows' => 10,
+                'teeny' => true,
+                'quicktags' => false,
+                'tinymce' => array(
+                    'toolbar1' => 'bold,italic,alignleft,aligncenter,alignright,link,forecolor,backcolor,undo,redo'
+                )
+            ));
+            ?>
+        </div>
+
+        
+
+<div class="form-group attachments-group">
+    <h3>اسناد پیوستی</h3>
+    <div class="attachment-input">
+        <div class="file-upload-wrapper">
+            <input type="file" name="attachments[]" id="attachments" multiple accept=".jpg,.jpeg,.png,.pdf" class="attachment-files">
+            <div class="file-upload-box">
+                <i class="upload-icon">📎</i>
+                <span class="upload-text">انتخاب اسناد پیوستی</span>
+                <span class="selected-count">هیچ فایلی انتخاب نشده</span>
+            </div>
+        </div>
+        <div class="selected-files-list"></div>
+    </div>
+    <small class="file-hint">فرمت‌های مجاز: JPG, PNG, PDF - حداکثر حجم هر فایل: 20MB - حداکثر 3 فایل</small>
+</div>
+
+
+
+
+        <div class="form-group submit-group">
+            <input type="submit" value="ارسال درخواست من" class="submit-button">
+            <?php wp_nonce_field('send_message_nonce', 'message_nonce'); ?>
+        </div>
+    </form>
+
+    <style>
+    .file-upload-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.file-upload-wrapper input[type="file"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.file-upload-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 15px 20px;
+    background: #f8f9fa;
+    border: 2px dashed #0F2E6B;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.file-upload-wrapper:hover .file-upload-box {
+    background: #DCE7FD;
+    border-color: #0F2E6B;
+}
+
+.upload-icon {
+    font-size: 24px;
+    margin-left: 10px;
+    color: #0F2E6B;
+}
+
+.upload-text {
+    font-weight: bold;
+    color: #0F2E6B;
+    margin-left: 10px;
+}
+
+.selected-count {
+    color: #666;
+    font-size: 0.9em;
+    margin-right: 10px;
+}
+
+.selected-files-list {
+    margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+}
+
+.file-item {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    width: 150px;
+    text-align: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.file-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+     
+    .user-time-info {
+        background: #f8f9fa;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .user-time-info p {
+        margin: 5px 0;
+        font-size: 14px;
+        color: #666;
+    }
+    .custom-message-form {
+        width: 1300px;
+        max-width: 100%;
+        margin: 20px auto;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    .form-group {
+        margin-bottom: 30px;
+    }
+    .form-group h3 {
+        background-color: #0F2E6B;
+        color: #FFFFFF;
+        padding: 10px;
+        border-radius: 7px;
+        font-size: 16px;
+        font-weight: 600;

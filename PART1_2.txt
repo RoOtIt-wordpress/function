@@ -1,0 +1,666 @@
+        margin-bottom: 15px;
+    }
+    .horizontal-radio {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 15px;
+        background-color: #DCE7FD;
+        color: #0F2E6B;
+        border-radius: 7px;
+        padding: 15px;
+    }
+    .radio-item {
+        display: inline-flex;
+        align-items: center;
+        background: #f8f9fa;
+        padding: 8px 15px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .radio-item:hover {
+        background: #e9ecef;
+        border-color: #0F2E6B;
+    }
+    .radio-item input {
+        transform: scale(1.5);
+        margin-left: 8px;
+    }
+    .radio-item label {
+        font-size: 18px;
+        font-weight: bold;
+        margin-right: 8px;
+        cursor: pointer;
+    }
+    .radio-item input:checked + label {
+        color: #0F2E6B;
+    }
+    .user-search, .message-title {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+    .user-select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+        height: 150px;
+        overflow-y: auto;
+        background-color: #DCE7FD;
+        color: #0F2E6B;
+    }
+    .filter-status {
+        margin: 5px 0;
+        padding: 5px 10px;
+        font-size: 0.9em;
+        color: #666;
+        background: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .attachment-input {
+        margin: 20px 0;
+        text-align: center;
+    }
+    .file-hint {
+        display: block;
+        text-align: center;
+        color: #666;
+        margin-top: 10px;
+    }
+    .selected-files-list {
+        margin-top: 15px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+    }
+    .file-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        width: 150px;
+    }
+    .file-item img {
+        width: 100px;
+        height: 100px;
+        object-fit: cover;
+        margin-bottom: 5px;
+        border-radius: 4px;
+    }
+    .file-item .file-info {
+        text-align: center;
+        word-break: break-all;
+        font-size: 12px;
+    }
+    .file-item .remove-file {
+        color: #dc3545;
+        cursor: pointer;
+        margin-top: 5px;
+    }
+    .submit-group {
+        margin-top: 40px;
+    }
+    .submit-button {
+        background: #0F2E6B;
+        color: white;
+        padding: 12px 25px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: all 0.3s ease;
+    }
+    .submit-button:hover {
+        background: #0a1f4d;
+        transform: translateY(-1px);
+    }
+    .loading-message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(15, 46, 107, 0.9);
+        color: white;
+        padding: 20px 40px;
+        border-radius: 8px;
+        z-index: 1000;
+        text-align: center;
+        font-size: 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    </style>
+
+    <script>
+    jQuery(document).ready(function($) {
+        $("#myform .form-group:not(:first) input, #myform .form-group:not(:first) select, #myform .form-group:not(:first) textarea").prop("disabled", true);
+
+        function updateUserCount() {
+            var visibleCount = $("#selected_user option:visible").length;
+            var totalCount = $("#selected_user option").length;
+            $("#filter-status").text(`نمایش ${visibleCount} کاربر از ${totalCount} کاربر`);
+        }
+
+        updateUserCount();
+
+        $("#user-search").on("keyup", function() {
+            var value = $(this).val().toLowerCase();
+            $("#selected_user option").filter(function() {
+                var matches = $(this).text().toLowerCase().indexOf(value) > -1;
+                $(this).toggle(matches);
+            });
+            updateUserCount();
+        });
+
+        $("input[name='user_role']").change(function() {
+            var selectedRole = $(this).val();
+            $("#myform .form-group:not(:first) input, #myform .form-group:not(:first) select, #myform .form-group:not(:first) textarea").prop("disabled", false);
+            $("#selected_user option").hide();
+            $("#selected_user option[data-role*='" + selectedRole + "']").show();
+            $("#selected_user").val("");
+            $("#user-search").val("");
+            updateUserCount();
+        });
+
+        $("#attachments").change(function(e) {
+    var files = e.target.files;
+    var fileList = $(".selected-files-list");
+    var selectedCount = $(".selected-count");
+    fileList.empty();
+    
+    if (files.length > 3) {
+        alert("شما فقط می‌توانید 3 فایل انتخاب کنید.");
+        $(this).val("");
+        selectedCount.text("هیچ فایلی انتخاب نشده");
+        return;
+    }
+
+    if (files.length === 0) {
+        selectedCount.text("هیچ فایلی انتخاب نشده");
+    } else {
+        selectedCount.text(files.length + " فایل انتخاب شده");
+    }
+    
+    Array.from(files).forEach(function(file, index) {
+        var fileSize = (file.size / (1024 * 1024)).toFixed(2);
+        
+        if (file.size > 20 * 1024 * 1024) {
+            alert("فایل " + file.name + " بزرگتر از 20 مگابایت است.");
+            $("#attachments").val("");
+            fileList.empty();
+            selectedCount.text("هیچ فایلی انتخاب نشده");
+            return false;
+        }
+        
+        var fileItem = $('<div class="file-item"></div>');
+        
+        if (file.type.startsWith('image/')) {
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                fileItem.append(`<img src="${e.target.result}" alt="${file.name}" style="width:100px; height:100px; object-fit:cover; border-radius:4px; margin-bottom:10px;">`);
+                fileItem.append(`<div class="file-info">${file.name}<br>(${fileSize} MB)</div>`);
+                fileItem.append(`<button type="button" class="remove-file" data-index="${index}" style="margin-top:10px; padding:5px 15px; border:none; background:#dc3545; color:white; border-radius:4px; cursor:pointer;">حذف</button>`);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            fileItem.append('<img src="<?php echo get_template_directory_uri(); ?>/assets/pdf-icon.png" alt="PDF" style="width:100px; height:100px; object-fit:contain; border-radius:4px; margin-bottom:10px;">');
+            fileItem.append(`<div class="file-info">${file.name}<br>(${fileSize} MB)</div>`);
+            fileItem.append(`<button type="button" class="remove-file" data-index="${index}" style="margin-top:10px; padding:5px 15px; border:none; background:#dc3545; color:white; border-radius:4px; cursor:pointer;">حذف</button>`);
+        }
+        
+        fileList.append(fileItem);
+    });
+});
+$(document).on("click", ".remove-file", function() {
+    var fileInput = $("#attachments")[0];
+    var selectedCount = $(".selected-count");
+    var index = $(this).data("index");
+    var files = Array.from(fileInput.files);
+    files.splice(index, 1);
+    
+    fileInput.value = "";
+    $(".selected-files-list").empty();
+    
+    if (files.length > 0) {
+        const dt = new DataTransfer();
+        files.forEach(file => dt.items.add(file));
+        fileInput.files = dt.files;
+        $(fileInput).trigger("change");
+    } else {
+        selectedCount.text("هیچ فایلی انتخاب نشده");
+    }
+});
+
+        $("#myform").on("submit", function(e) {
+            e.preventDefault();
+            
+            var submitButton = $(this).find("input[type=submit]");
+            submitButton.prop("disabled", true);
+            
+            var loadingMessage = $("<div>").addClass("loading-message")
+                .text("پیام درحال ارسال، لطفا صبر کنید و صفحه را ترک نکنید...");
+            $("body").append(loadingMessage);
+
+            var formData = new FormData(this);
+            formData.append("action", "handle_message_submission");
+            
+            if (typeof tinymce !== "undefined" && tinymce.get("message")) {
+                formData.append("message", tinymce.get("message").getContent());
+            } else {
+                formData.append("message", $("#message").val());
+            }
+
+            $.ajax({
+                url: ajaxurl,
+                type: "POST",
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    loadingMessage.remove();
+                    if(response.success) {
+                        alert("پیام با موفقیت ارسال شد");
+                        $("#myform")[0].reset();
+                        if(tinymce.get("message")) {
+                            tinymce.get("message").setContent("");
+                        }
+                        $(".selected-files-list").empty();
+                        $("#myform .form-group:not(:first) input, #myform .form-group:not(:first) select, #myform .form-group:not(:first) textarea").prop("disabled", true);
+                    } else {
+                        alert("خطا: " + (response.data || "خطای نامشخص"));
+                    }
+                    submitButton.prop("disabled", false);
+                },
+                error: function(xhr, status, error) {
+                    loadingMessage.remove();
+                    alert("خطا در ارسال پیام: " + error);
+                    submitButton.prop("disabled", false);
+                }
+            });
+        });
+    });
+    </script>
+    <?php
+    return ob_get_clean();
+}
+//==================================================================================================================================== بخش جدول پیام های ارسال شده
+// PART 1: افزودن شورت‌کد پیام‌های ارسال شده
+add_shortcode('sent_messages', 'display_sent_messages');
+
+function display_sent_messages() {
+    if (!is_user_logged_in()) {
+        return '<div class="alert alert-warning">لطفا برای مشاهده پیام‌های ارسالی وارد شوید.</div>';
+    }
+
+    // اضافه کردن CSS و JS مورد نیاز
+    wp_enqueue_style('bootstrap', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css');
+    wp_enqueue_style('datatables', 'https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css');
+    wp_enqueue_style('datatables-responsive', 'https://cdn.datatables.net/responsive/2.2.9/css/responsive.dataTables.min.css');
+    
+    wp_enqueue_script('bootstrap-bundle', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js', array('jquery'), null, true);
+    wp_enqueue_script('datatables', 'https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js', array('jquery'), null, true);
+    wp_enqueue_script('datatables-responsive', 'https://cdn.datatables.net/responsive/2.2.9/js/dataTables.responsive.min.js', array('datatables'), null, true);
+
+    // دریافت پیام‌های ارسال شده کاربر جاری
+    $current_user_id = get_current_user_id(); // RoOtIt-wordpress
+    $current_time = current_time('mysql'); // 2025-02-23 14:53:41
+
+    $args = array(
+        'post_type' => 'messages',
+        'author' => $current_user_id,
+        'posts_per_page' => -1,
+        'orderby' => 'date',
+        'order' => 'DESC'
+    );
+
+    $messages = get_posts($args);
+    ob_start();
+    ?>
+    
+    <div class="sent-messages-wrapper" style="width: 1300px; max-width: 100%; margin: 0 auto;">
+        <div class="sent-messages-header">
+            <h2>پیام‌های ارسال شده</h2>
+            <div class="messages-stats">
+                <span class="total-messages">
+                    <i class="fas fa-envelope"></i>
+                    تعداد کل: <?php echo count($messages); ?> پیام
+                </span>
+            </div>
+        </div>
+
+        <?php if (empty($messages)): ?>
+            <div class="no-messages">
+                <div class="no-messages-icon">📭</div>
+                <h3>هیچ پیامی یافت نشد</h3>
+                <p>شما تاکنون پیامی ارسال نکرده‌اید.</p>
+                <a href="/send-message" class="button new-message-btn">ارسال پیام جدید</a>
+            </div>
+        <?php else: ?>
+            <table id="sent-messages-table" class="display responsive nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>شناسه</th>
+                        <th>گیرندگان</th>
+                        <th>عنوان پیام</th>
+                        <th>پیوست‌ها</th>
+                        <th>وضعیت</th>
+                        <th>عملیات</th>
+                        <th>تاریخ ارسال</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($messages as $message): 
+                        $recipients = get_post_meta($message->ID, 'selected_users', true);
+                        $attachments = get_post_meta($message->ID, 'message_attachments', true);
+                        $recipient_names = array();
+                        
+                        if (!empty($recipients)) {
+                            foreach ($recipients as $recipient_id) {
+                                $user = get_userdata($recipient_id);
+                                if ($user) {
+                                    $recipient_names[] = $user->display_name;
+                                }
+                            }
+                        }
+                        
+                        $post_date = get_post_time('U', false, $message);
+                        $current_time = current_time('timestamp');
+                        $time_diff = $current_time - $post_date;
+                        
+                        if ($time_diff < 86400) {
+                            $time_ago = human_time_diff($post_date, $current_time) . ' قبل';
+                        } elseif ($time_diff < 2592000) {
+                            $time_ago = floor($time_diff / 86400) . ' روز قبل';
+                        } else {
+                            $time_ago = floor($time_diff / 2592000) . ' ماه قبل';
+                        }
+                        
+                        $formatted_time = get_post_time('H:i', false, $message);
+                    ?>
+                        <tr>
+                            <td><span class="message-id">#<?php echo $message->ID; ?></span></td>
+                            <td>
+                                <div class="recipients-list">
+                                    <?php 
+                                    foreach ($recipient_names as $name) {
+                                        echo '<div class="recipient-name">' . esc_html($name) . '</div>';
+                                    }
+                                    ?>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="message-title">
+                                    <strong><?php echo esc_html($message->post_title); ?></strong>
+                                    <span class="message-preview"><?php echo wp_trim_words($message->post_content, 10); ?></span>
+                                </div>
+                            </td>
+                            <td>
+                                <?php if (!empty($attachments)): ?>
+                                    <div class="attachments-preview">
+                                        <span class="attachment-count">
+                                            <?php echo count($attachments); ?> فایل
+                                        </span>
+                                        <div class="attachment-list">
+                                            <?php foreach ($attachments as $attachment): ?>
+                                                <a href="<?php echo esc_url($attachment); ?>" 
+                                                   class="attachment-link" 
+                                                   target="_blank"
+                                                   title="دانلود پیوست">
+                                                    <?php 
+                                                    $file_ext = strtolower(pathinfo($attachment, PATHINFO_EXTENSION));
+                                                    echo ($file_ext == 'pdf') ? '📄' : '📎';
+                                                    ?>
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php else: ?>
+                                    <span class="no-attachment">-</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php
+                                $read_count = 0;
+                                $total_recipients = count($recipient_names);
+                                $status_class = ($read_count == $total_recipients) ? 'status-read' : 'status-pending';
+                                ?>
+                                <span class="message-status <?php echo $status_class; ?>">
+                                    <?php echo $read_count . ' از ' . $total_recipients . ' خوانده شده'; ?>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="message-actions">
+                                    <button class="btn btn-sm btn-primary view-message" 
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#messageModal"
+                                            data-id="<?php echo $message->ID; ?>"
+                                            data-title="<?php echo esc_attr($message->post_title); ?>"
+                                            data-content="<?php echo esc_attr($message->post_content); ?>"
+                                            title="مشاهده پیام">
+                                        👁️
+                                    </button>
+                                    <button class="btn btn-sm btn-info forward-message"
+                                            data-id="<?php echo $message->ID; ?>"
+                                            title="فوروارد پیام">
+                                        ↪️
+                                    </button>
+                                    <?php if (current_user_can('administrator')): ?>
+                                    <button class="btn btn-sm btn-danger delete-message"
+                                            data-id="<?php echo $message->ID; ?>"
+                                            title="حذف پیام">
+                                        🗑️
+                                    </button>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
+                            <td data-order="<?php echo $post_date; ?>">
+                                <div class="message-date">
+                                    <div class="date-ago"><?php echo $time_ago; ?></div>
+                                    <div class="time"><?php echo $formatted_time; ?></div>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+
+        <!-- Bootstrap Modal -->
+        <div class="modal fade" id="messageModal" tabindex="-1" aria-labelledby="messageModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="messageModalLabel"></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="modal-content"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php
+    return ob_get_clean();
+} 
+// PART 2: اضافه کردن استایل‌های سفارشی
+add_action('wp_head', 'sent_messages_styles');
+
+function sent_messages_styles() {
+    ?>
+    <style>
+        /* استایل‌های کلی و wrapper */
+        .sent-messages-wrapper {
+            padding: 20px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px auto;
+            direction: rtl;
+        }
+
+        .sent-messages-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .sent-messages-header h2 {
+            color: #0F2E6B;
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .messages-stats {
+            display: flex;
+            gap: 20px;
+        }
+
+        .messages-stats span {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* استایل شناسه پیام - جدید */
+        .message-id {
+            font-family: monospace;
+            font-size: 14px;
+            color: #0F2E6B;
+            font-weight: bold;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        /* استایل جدول اصلی */
+        #sent-messages-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: #fff;
+            margin-bottom: 20px;
+        }
+
+        #sent-messages-table thead th {
+            background: #0F2E6B;
+            color: white;
+            padding: 15px;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        #sent-messages-table tbody td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+
+        /* استایل عنوان و محتوای پیام */
+        .message-title {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .message-title strong {
+            color: #0F2E6B;
+            font-size: 16px;
+        }
+
+        .message-preview {
+            color: #666;
+            font-size: 13px;
+        }
+
+        /* استایل لیست گیرندگان - بهبود یافته */
+        .recipients-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .recipient-name {
+            padding: 2px 0;
+            position: relative;
+        }
+
+        .recipient-name:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            border-bottom: 1px dashed #eee;
+        }
+
+        /* استایل تاریخ و زمان */
+        .message-date {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .date-ago {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .time {
+            color: #0F2E6B;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        /* استایل وضعیت پیام */
+        .message-status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
+        .status-read {
+            background: #e3f9e5;
+            color: #1b874b;
+        }
+
+        .status-pending {
+            background: #fff4de;
+            color: #c76615;
+        }
+
+        /* استایل پیوست‌ها */
+        .attachments-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .attachment-count {
+            font-size: 13px;
+            color: #666;
